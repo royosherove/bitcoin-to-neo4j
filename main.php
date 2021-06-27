@@ -16,20 +16,29 @@ $redis->connect(REDIS_IP, REDIS_PORT);
 
 // Composer
 require_once 'vendor/autoload.php';
-use GraphAware\Neo4j\Client\ClientBuilder;  // (graphaware/neo4j-php-client)
+//use GraphAware\Neo4j\Client\ClientBuilder;  // (graphaware/neo4j-php-client)
+use Laudis\Neo4j\Authentication\Authenticate;
+use Laudis\Neo4j\ClientBuilder;
 
 // Neo4j
+//$neo = ClientBuilder::create()
+                    //->addConnection('default', 'bolt://'.NEO4J_USER.':'.NEO4J_PASS.'@'.NEO4J_IP.':'.NEO4J_PORT)
+                    //->setDefaultTimeout(0)
+                    //->build(); // NOTE: set timeout to 0 (so it does not timeout on huge transactions)
+
 $neo = ClientBuilder::create()
-                    ->addConnection('default', 'bolt://'.NEO4J_USER.':'.NEO4J_PASS.'@'.NEO4J_IP.':'.NEO4J_PORT)
-                    ->setDefaultTimeout(0)
-                    ->build(); // NOTE: set timeout to 0 (so it does not timeout on huge transactions)
+        ->withDriver('bolt', 'bolt://neo4j:parserbtc@localhost') // creates a bolt driver
+        //->withDriver('https', 'https://localhost', Authenticate::basic('', 'password')) // creates an http driver
+        //->withDriver('neo4j', 'neo4j://neo4j.test.com?database=my-database', Authenticate::kerberos('token')) // creates an auto routed driver
+        ->withDefaultDriver('bolt')
+        ->build();
 
 // Create Neo4j constraints (for unique indexes, not regular indexes (should be faster))
-$neo->run("CREATE CONSTRAINT ON (b:block) ASSERT b.hash IS UNIQUE");
-$neo->run("CREATE CONSTRAINT ON (t:tx) ASSERT t.txid IS UNIQUE");
-$neo->run("CREATE CONSTRAINT ON (o:output) ASSERT o.index IS UNIQUE");
-$neo->run("CREATE INDEX ON :block(height)");
-$neo->run("CREATE INDEX ON :address(address)"); // for getting outputs locked to an address
+//$neo->run("CREATE CONSTRAINT ON (b:block) ASSERT b.hash IS UNIQUE");
+//$neo->run("CREATE CONSTRAINT ON (t:tx) ASSERT t.txid IS UNIQUE");
+//$neo->run("CREATE CONSTRAINT ON (o:output) ASSERT o.index IS UNIQUE");
+//$neo->run("CREATE INDEX ON :block(height)");
+//$neo->run("CREATE INDEX ON :address(address)"); // for getting outputs locked to an address
 
 // Functions
 include('functions/tx.php');        // decode transaction
@@ -192,7 +201,7 @@ while(true) { // Keep trying to read files forever
         // a. Create the new block, or add properties to it if we've already made a placeholder for it.
         $createblock = "
         MERGE (block:block {hash:'$blockhash'})
-        CREATE UNIQUE (block)-[:coinbase]->(:output:coinbase)
+        MERGE (block)-[:coinbase]->(:output:coinbase)
         SET
             block.size=$blocksize,
             block.txcount=$txcount,
@@ -230,7 +239,7 @@ while(true) { // Keep trying to read files forever
         // ------------------
 
         // Get the height
-        foreach ($run->records() as $record) {
+        foreach ($run as $record) {
             $height = $record->get('height');
             echo $height;
             $prevblock = $record->get('prevblock');
@@ -273,7 +282,7 @@ while(true) { // Keep trying to read files forever
             ");
 
             // Get the array of blocks to be populated
-            foreach ($chainabove->records() as $record) {
+            foreach ($chainabove as $record) {
                 $chainabove = $record->get('chainabove');
             };
 
@@ -288,11 +297,11 @@ while(true) { // Keep trying to read files forever
                 RETURN block
                 ");
 
-                foreach ($orphanrun->records() as $record) {
+                foreach ($orphanrun as $record) {
                     $orphanblock = $record->get('block');
                 }
-                $orphanheight = $orphanblock->value('height');
-                $orphanprevblock = $orphanblock->value('prevblock');
+                $orphanheight = $orphanblock->getProperty('height');
+                $orphanprevblock = $orphanblock->getProperty('prevblock');
 
                 echo "$orphanheight\n";
 
